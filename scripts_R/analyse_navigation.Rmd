@@ -1,0 +1,85 @@
+---
+title: "Navigation analyse"
+output: html_notebook
+fig_width: 8 
+fig_height: 4
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+## Description des données de navigations collectées depuis l'application GéoGuide
+
+```{r}
+df = read.table("/Users/lgrangi1/switchdrive/These/3_GM_Experiment/DBgeoguide_log/DB_results/temps_stop/temps_stop.csv", sep = ";", header=T)
+
+summary(df)
+
+library(ggplot2)
+library(reshape2)
+library(scales)
+library(dplyr)
+library(chron)
+library(hms)
+
+qplot(data=df,D_t, user, color = page ) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_x_discrete(breaks=c("10"))
+```
+
+## visualiser l'enchaînement des séquences d'utilisation 
+
+```{r}
+c <- ggplot(df, aes(x = user, y = D_t, fill = page))
+c + geom_bar(stat = "identity") + coord_flip() + xlab("utilisateurs") + ylab("temps passé par page") + theme(legend.position="bottom") + scale_y_time()
+```
+Ici on a l'enchaînement des séquences.
+
+```{r}
+df$D_t <- as.POSIXct(strptime(df$D_t, format="%H:%M:%S"))
+df$D_t <- times(format(df$D_t, "%H:%M:%S"))
+```
+
+```{r}
+
+c <- ggplot(df, aes(x = user, y = D_t, fill = page))
+c + geom_bar(stat = "identity") + coord_flip() + xlab("utilisateurs") + ylab("temps passé par page") + theme(legend.position="top") + scale_y_time()
+```
+Ici on a le temps mais trié par pages. Il est difficile de faire la différence entre les pages. Il faudrait pouvoir étendre le temps sur l'axe des X.
+
+## Essayer de visualiser le temps passé par page
+
+
+```{r}
+
+#facet_grid affiche tous les plots, même ceux qui sont vides. facets_wrap affiche que les plots qui contiennent des valeurs.
+page_count <-  as.data.frame(table(df$page))
+
+d <- ggplot(df, aes(x = user, y = D_t))
+d + facet_wrap(~ page) + geom_bar(stat = "identity") + labs(title = "Visite par page et par utilisateur", x="Utilisateur", y="Nb de visites") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+
+```{r}
+
+df %>% # par page
+  group_by(page) %>% 
+  summarise_at(c("D_t"), funs(sd, mean, median))
+
+
+```
+temps moyen passé par page?
+
+```{r}
+ggplot(df, aes(x=page, y=D_t)) + 
+  geom_bar(stat="identity", width=.5) + 
+  labs(title="temps moyen par page", caption="source: mpg") + 
+  theme(axis.text.x = element_text(angle=90, vjust=0.6)) + scale_y_time(breaks = waiver())
+```
+
+

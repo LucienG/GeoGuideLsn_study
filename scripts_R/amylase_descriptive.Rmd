@@ -1,0 +1,182 @@
+---
+title: "Amylase descriptives"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+
+```{r}
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+
+df = read.csv(file="./a_amylase22_R.csv", sep = ";", header=T)
+
+df2 = read.csv(file="./a_amylase_spss.csv", sep = ";", header=T)
+
+# déclarer les facteurs
+df$echantillon <- factor(df$echantillon)
+df$Patient <- factor(df$Patient)
+df$gstatus <- factor(df$gstatus_GM1)
+df$sexe <- factor(df$sexe_H1)
+
+which(is.na(df)==T) #vérifier données manquantes
+
+head(df)
+summary(df)
+
+```
+```{r}
+#Hommes - Femmes
+table(df2$sexe)
+table(df2$gstatus)
+summary(df$U_mL)
+sd(df$U_mL)
+```
+
+
+
+Spécifier les "levels" des facteurs pour qu'ils s'affichent dans l'ordre
+```{r}
+ech_levels <- c("PE1", "PE2", "PE3", "E4", "E5", "E6")
+ech	<-	df$echantillon <- factor(df$echantillon, levels = ech_levels)
+
+levels(df$gstatus) <- list(GM=1, NOGM=2) #renommer les "levels"
+levels(df$sexe) <- list(Homme=1, Femme=2) #renommer les "levels"
+```
+## Remarques
+
+L'a-amylase est une enzyme dont la concentration est mesurée en U/ml (Unités/ml). La production de cette enzyme augmente avec le stress. Notre objectif ici est de voir s'il y a une différence signyficative dans la production d'a-amylase entre les personnes ayant utilisé la version GM et la version NOGM du GeoGuide.
+
+Les mesures ont été faites par prélévement de salive, 6 échantillons, 3 pré-chantillons (PE) et 3 échantillons (E).
+
+
+## Graphiques
+
+```{r}
+#p_sexes <- ggplot(df, aes(Patient, sexe)) + geom_bar()
+
+#p_sexes
+```
+
+
+### Concentration a-amylase par échantillon et par utilisateur:
+
+```{r}
+p_amylase_echantillon <- ggplot(df, aes(echantillon, U_mL)) + geom_jitter(aes(colour = Patient), width = 0.25)
+
+p_amylase_echantillon
+```
+
+
+```{r}
+sd(df$U_mL)
+
+
+df %>% # sd par échantillons
+  group_by(echantillon) %>% 
+  summarise_at(c("U_mL"), funs(sd, mean, median))
+
+
+df %>% # sd par utilisateur
+  group_by(Patient) %>% 
+  summarise_at(c("U_mL"), funs(sd, mean, median))
+
+```
+
+
+Sur ce premier graphique qui illustre la répartition des prélèvement par échantillon et par utilisateur nous montre la forte variabilité entre les mesures (sd = 90.6), entre les échantillons et entre les individus.
+
+### Concentration d'a-amylase par utilisateur et par échantillon avec distinction du genre et du mode
+```{r}
+par(mfrow=c(1,3), pty="s") #pty="s" gives square plotting regions
+p_amylase_echantillon_facet <- ggplot(df, aes(ech, U_mL)) + geom_jitter(aes(colour = gstatus, shape = sexe), width = 0.25) + facet_grid(.~ Patient) + labs(title = "Concentration d'a-amylase par prélèvement et par utilisateur", x="échantillons", y="a-amylase [U/ml]", colour = "gstatus", shape = "genre") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+p_amylase_echantillon_facet
+#ggsave(paste("p_amylase_echantillon_facet.pdf"), device = pdf, width = 8, height = 4, dpi = 300)
+```
+
+
+Encore une fois, on constate qu'il peut y avoir de fortes variation de concentrations. Comparons par exemple G01 avec des valeures inférieures à 100 U/ml et G04 avec des valeurs allant de 199 à 470 U/ml.
+
+En comparant les individus selon le mode de l'application "gstatus" il n'est pas possible de dégager une tendance claire qui permettrait de différencier les deux mode. 
+
+En comparant les individus selon le genre, on ne peut pas observer de différence nette. On observe cependant chez les hommes un moins grande amplitude que chez les femmes.
+
+En considérant maintenant les résultats par individu, on remarque que pour G04 et G06 les 3 premiers prélèvements sont groupés et que les trois suivants sont plus dispersés et ont des valeurs plus elevés.
+
+
+```{r}
+p_amylase_gstatus <-  ggplot(df, aes(x = gstatus, y = U_mL)) + geom_boxplot(outlier.colour = "red", outlier.shape = 3) + geom_jitter(aes(colour = Patient), width = 0.2) + labs(title = "Concentration d'a-amylase selon mode Gamification - GM/NOGM", x="mode", y="a-amylase [U.ml]", colour = "Sujets")
+#The jitter geom is a convenient default for geom_point with position = 'jitter'. It's a useful way of handling overplotting caused by discreteness in smaller datasets
+
+p_amylase_gstatus
+#ggsave(paste("p_amylase_gstatus.pdf"), device = pdf, width = 7, height = 5, dpi = 300)
+```
+```{r}
+df %>% # sd par mode
+  group_by(gstatus) %>% 
+  summarise_at(c("U_mL"), funs(sd, mean, median))
+```
+
+Si l'on compare les concentrations d'a-amylase entre les 2 modes GM/NOGM on constate que la moyenne des 2 groupes est très proche 148 U/ml pour GM et 129.5 U/ml pour NOGM. La médiane est respectivement de 142.95 et 132.35 U/ml. Pour le mode GM, les valeures sont clairement tirées vers le haut pas G04.
+
+```{r}
+p_amylase_genre <- ggplot(df, aes(x = sexe, y = U_mL)) + geom_boxplot(outlier.colour = "red", outlier.shape = 3) + geom_jitter(aes(colour = Patient, shape = gstatus), width = 0.2) + labs(title = "Concentration d'a-amylase selon le genre", x="genre", y="a-amylase [U/ml]", colour = "Sujets")
+#The jitter geom is a convenient default for geom_point with position = 'jitter'. It's a useful way of handling overplotting caused by discreteness in smaller datasets
+
+p_amylase_genre
+#ggsave(paste("p_amylase_genre"), device = pdf, width = 7, height = 5, dpi = 300)
+```
+```{r}
+df %>% # sd par sexe
+  group_by(sexe) %>% 
+  summarise_at(c("U_mL"), funs(sd, mean, median))
+```
+La comparaison par sexe montre une différence marquée entre hommes et femmes. Ces dernières présentant une concentration plus élevés. Il pourrait y avoir une forte influence du genre sur le graphique GM/NOGM qui précède car G04 et G10 sont des femmes qui appartiennent toutes deux à la catégorie GM.
+
+
+```{r}
+p_boxEch <- ggplot(df, aes(x = ech, y = U_mL)) + geom_boxplot(outlier.colour = "red", outlier.shape = 3) + geom_jitter(aes(colour = Patient, shape = gstatus), width = 0.2) + labs(title = "Concentration d'a-amylase par prélèvement et par utilisateur et gstatus", x="échantillons", y="a-amylase [U/ml]", colour = "Sujets")
+#The jitter geom is a convenient default for geom_point with position = 'jitter'. It's a useful way of handling overplotting caused by discreteness in smaller datasets
+
+p_boxEch
+```
+La série de pré-échantillons (PE) devait nous permettre d'avoir une référence concernant la réponse individuelle au stress. Nous nous attendions à observer une augmentation de U/ml de PE1 à PE3. Si la médiane PE3 est bien supérieure à PE1 nous observons une diminution des valeures pour PE2.
+
+Les valeures médianes des échantillons de l'expérience avec l'application (E) sont supérieures à celles obtenues durant PE. Contrairement à ce que nous avions imaginé nous observons une diminution des concentrations au fil de l'expérience.
+
+```{r}
+p_boxEch <- ggplot(df, aes(x = ech, y = U_mL)) + geom_boxplot(outlier.colour = "red", outlier.shape = 3) + geom_jitter(aes(colour = Patient), width = 0.2) + facet_grid(gstatus ~ .) + labs(title = "Concentration d'a-amylase par prélèvement et par utilisateur et gstatus", x="échantillons", y="a-amylase [U/ml]", colour = "Sujets")
+#The jitter geom is a convenient default for geom_point with position = 'jitter'. It's a useful way of handling overplotting caused by discreteness in smaller datasets
+
+p_boxEch
+```
+Si l'on compare la concentration par échantillons en fonction du mode GM/NOGM, on observe une concentration globale  plus élevée pour le mode GM E4, mais également une plus forte diminution des concentrations au fil de l'expérience.  
+
+
+## Corrélation
+
+```{r}
+cor.test(df$U_mL, df$sexe_H1)
+cor.test(df$U_mL, df$gstatus_GM1)
+cor.test(df$U_mL, df$BMI)
+```
+Une corrélation de 0.295 et une valeur P de 0.006 indique un lien entre le genre et la concentration d'a-amylase (?)
+
+
+```{r}
+ggplot(df, aes(U_mL, color = echantillon)) +
+geom_density()
+```
+

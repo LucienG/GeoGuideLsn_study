@@ -1,0 +1,717 @@
+---
+title: "MET_descritpion"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+
+# MET analyse des questionnaires des étudiants 2014, 2015, 2016
+
+ouverture du fichier et chargement des packages
+```{r}
+tableau = read.table("./MET_QCM_3y_code.csv", sep = ";", header=TRUE, fill = TRUE, quote = "")
+
+summary(tableau)
+
+library(ggplot2)
+library(reshape2)
+library(tidyr)
+library(OIdata)
+library(readr)
+library(RColorBrewer)
+library(dplyr)
+library(grid)
+library(gridExtra)
+```
+
+
+```{r}
+# initialisation de la fonction multiplot
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+# fin de la fonction
+
+
+#clef pour les variables
+
+Annee	<-	tableau$Annee
+Age	<-	tableau$Age
+Sexe	<-	tableau$Sexe
+Langue_courante	<-	tableau$Langue_courante
+Langue_courante <-  factor(Langue_courante,levels(Langue_courante)[c(3,1,4,2,5)]) #reorganiser l'ordre des réponse pour correspondre à l'ordre logique (pour les facteurs)
+
+Cursus	<-	tableau$Cursus
+Cursus <-  factor(Cursus,levels(Cursus)[c(5,6,2,3,4,1,7)])
+
+Used	<-	tableau$Used
+Used <-  factor(Used,levels(Used)[c(3,1,2)])
+
+OS	<-	tableau$OS
+
+Origin_levels <- c("Lausanne", "Une commune de l agglomeration lausannoise", "Une commune du canton de Vaud", "Une commune suisse hors du canton de Vaud", "Une commune situee hors de Suisse")
+Origin	<-	tableau$Origin <- factor(tableau$Origin, levels = Origin_levels)
+
+#Origin <- gsub(" ", "\n", Origin)
+
+
+kLsn_levels <- c("Aucune connaissance", "Faible", "Moyenne", "Bonne", "Excellente")
+know_lsn	<-	tableau$know_lsn <- factor(tableau$know_lsn, levels = kLsn_levels)
+
+
+ggRate_levels <- c("Mauvaise", "Assez mauvaise", "Moyenne", "Bonne","Excellente")
+GG_rate	<-	tableau$GG_rate <- factor(tableau$GG_rate, levels = ggRate_levels)
+
+content_rate	<-	tableau$content_rate
+content_rate <-  factor(content_rate,levels(content_rate)[c(4,1,2,5,3)])
+
+form_rate	<-	tableau$form_rate
+form_rate <-  factor(form_rate,levels(form_rate)[c(3,1,4,2,6,5)])
+
+navRate_levels <- c( "Tres compliquee", "Compliquee", "Assez facile et conviviale", "Facile et conviviale", "Tres facile et conviviale")
+nav_rate	<-	tableau$nav_rate <- factor(tableau$nav_rate, levels = navRate_levels)
+
+
+navExp_levels <- c("Tres difficile", "Difficile", "Assez difficile", "Adaptee", "Facile", "Tres facile")
+nav_exp	<-	tableau$nav_exp <- factor(tableau$nav_exp, levels = navExp_levels)
+
+content_diff	<-	tableau$content_diff
+content_diff <-  factor(content_diff,levels(content_diff)[c(6,4,1,3,5,2)])
+
+text_quality	<-	tableau$text_quality
+text_quality <-  factor(text_quality,levels(text_quality)[c(6,3,4,1,2,5)])
+
+picture_quality	<-	tableau$picture_quality
+picture_quality <-  factor(picture_quality,levels(picture_quality)[c(3,4,1,2,5)])
+
+# On prépare la liste des postes du GéoGuide dans leur ordre d'apparition (car par défaut ggplot classe les observations sur les axes par ordre alphabétique ≠ on ne veut pas ça!)
+
+stop_order <- c("Tour Sauvabelin", "Lac Sauvabelin", "Cascade Flon", "Derivation Flon", "Paroi Molasse", "Place Vallon", "Tunnel Barre", "Cathedrale", "Place Riponne", "Louve souterraine", "Place St Laurent", "Place Pepinet", "Passerelle Flon milieu", "Passerelle Flon Sud", "Esplanade Montbenon", "Pont Chauderon", "Avenue Provence", "Chemin usine gaz", "Chemin Prairie", "Vallee Jeunesse", "Deversoire orage", "Giratoire Maladiere", "Stade Coubertain", "Ruines Vidy", "Siege CIO", "STEP Vidy", "Chamberonne", "Allee Dorigny", "Moraine Dorigny", "UNIL Mouline", "Aucun", "NULL")
+
+#On recode les 4 variables relatives aux postes en incluant l'ordre des postes 
+tableau$Best_contentStop <- factor(tableau$Best_contentStop, levels = stop_order)
+tableau$Worst_ContentStop <- factor(tableau$Worst_ContentStop, levels = stop_order)
+tableau$Best_formStop <- factor(tableau$Best_formStop, levels = stop_order)
+tableau$Worst_formStop <- factor(tableau$Worst_formStop, levels = stop_order)
+```
+# Répartition des étudiants par âge et par sexe
+
+```{r}
+p_age_sexe <- ggplot(na.omit(tableau), aes(Age, fill = Sexe)) +
+  geom_bar()+ xlab("âge des étudiants") + ylab("nb étudiants")+theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+)+theme(legend.title=element_blank(), axis.ticks = element_blank()) + geom_vline(aes(xintercept = median(Age), color="mediane"), linetype="dashed") + scale_color_manual(name = "statistics", values = c(mediane = "#BB0000"))
+
+print(p_age_sexe)
+#ggsave("age_sexe.png", width = 5, height = 5, dpi = 300)
+```
+Dans cet échantillon d'étudiants de 1ère année de bachelor, l'âge moyen des étudiant est de 20.7 ans et l'âge médian est de 20 ans. Il y a 45.9% de femmes et 54.1% d'hommes. 
+
+```{r}
+p_age_sexe_facet <- ggplot(na.omit(tableau), aes(Age, fill = Sexe)) +
+  geom_bar()+ xlab("âge des étudiants") + ylab("nb étudiants")+theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+)+theme(legend.title=element_blank(), axis.ticks = element_blank()) +
+  geom_vline(aes(xintercept = median(Age), color="mediane"), linetype="dashed") + scale_color_manual(name = "statistics", values = c(mediane = "#BB0000"))+
+facet_grid(.~Annee)
+
+#print(p_age_sexe_facet)
+ggsave("age_sexe_facet.png", width = 7, height = 5, dpi = 300)
+```
+```{r}
+mean(Age)
+median(Age)
+summary(Sexe)
+
+tableau %>%
+  group_by(Sexe) %>%
+  summarise_at(vars(Age), funs(mean(., na.rm=TRUE)))
+```
+```{r}
+round(prop.table(table(tableau$Sexe))*100,1) 
+
+```
+
+## Nombre d'étudiant par année et par cursus
+
+```{r}
+p_annee_cursus <- ggplot(tableau, aes(Annee, fill = Cursus)) +
+  geom_bar()+ xlab("année de la volée") + ylab("nb étudiants")+theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+)+theme(legend.title=element_blank(), axis.ticks = element_blank())
+
+print(p_annee_cursus)
+#ggsave("annee_cursus.png", width = 5, height = 5, dpi = 300)
+```
+Le graphique ci-dessus illustre le nombre d'e répondants'étudiants ayant répondu au questionnaire par année [2014:26, 2015:60, 2016:84]. Le cours rassemble les étudiants des 3 orientation: Géographie, géologie, environnement. On peut observer une nette augmentation des participants en faculté des Lettres et en orientation géologie.
+
+## Répartition des étudiants par langue maternelle  et volée
+
+```{r}
+#Répartition des étudiants par langue parlée
+p_langue_annee <- ggplot(na.omit(tableau), aes(Langue_courante)) +
+  geom_bar()+ xlab("Langue maternelle") + ylab("nb étudiants")+theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+)+theme(axis.ticks = element_blank())
+
+print(p_langue_annee)
+#ggsave("langue_annee.png", width = 5, height = 5, dpi = 300)
+```
+Les étudiants sont majoritairement francophones. Nous en déduisons qu'ils étaient à même de compredre le contenu de l'application ainsi que le questionnaire.
+
+## Origine des étudiants
+
+```{r}
+p_student_origin <- ggplot(na.omit(tableau), aes(Origin)) +
+  geom_bar()+ xlab("Origine des étudiants") + ylab("nb étudiants")+theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+)+theme(axis.ticks = element_blank()) + scale_x_discrete(breaks=c("Lausanne","Une commune du canton de Vaud", "Une commune situee hors de Suisse", "Une commune suisse hors du canton de Vaud", "Une commune de l agglomeration lausannoise"), labels=c("Lausanne", "Cne VD", "Hors CH", "Cne hors VD", "Cne agglo Lsn"))
+
+print(p_student_origin)
+#ggsave("student_origin.png", width = 5, height = 5, dpi = 300)
+```
+
+
+## Connaissance de la Ville de Lausanne
+
+```{r}
+p_know_lsn <- ggplot(na.omit(tableau), aes(know_lsn)) + geom_bar()
+
+print(p_know_lsn)
+#ggsave("know_lsn.png", width = 5, height = 5, dpi = 300)
+```
+
+
+
+## Profil technologique
+
+```{r}
+p_access_device <- ggplot(na.omit(tableau), aes(Used)) + geom_bar()
+
+print(p_access_device)
+#ggsave("access_device.png", width = 5, height = 5, dpi = 300)
+```
+
+### OS de l'appareil utilisé lors du test
+
+```{r}
+p_OS <- ggplot(na.omit(tableau), aes(OS)) + geom_bar()
+
+print(p_OS)
+#ggsave("OS.png", width = 5, height = 5, dpi = 300)
+```
+
+# À propos de l'application GéoGuide
+
+## Appréciation globale du GeoGuide Lausanne
+
+```{r}
+p_geoguide_rate <- ggplot(na.omit(tableau), aes(GG_rate)) +
+  geom_bar(aes(y = (..count..)/sum(..count..))) + 
+  scale_y_continuous(labels=scales::percent) +
+  ylab("relative frequencies")
+
+print(p_geoguide_rate) 
+#ggsave("geoguide_rate.png", width = 5, height = 5, dpi = 300)
+```
+
+
+## Appréciation du contenu général du GéoGuide
+
+```{r}
+p_content_rate <- ggplot(na.omit(tableau), aes(content_rate)) + geom_bar()
+
+print(p_content_rate) 
+#ggsave("content_rate.png", width = 5, height = 5, dpi = 300)
+```
+## Appréciation de la forme générale du GéoGuide
+
+```{r}
+p_form_rate <- ggplot(na.omit(tableau), aes(form_rate)) + geom_bar()
+
+print(p_form_rate)  
+#ggsave("form_rate.png", width = 5, height = 5, dpi = 300) 
+```
+
+## Appréciation du Géoguide en terme de navigation (interactions)
+
+```{r}
+p_nav_rate <- ggplot(na.omit(tableau), aes(nav_rate)) + geom_bar()
+
+print(p_nav_rate) 
+#ggsave("nav_rate.png", width = 5, height = 5, dpi = 300)
+```
+## Appréciation du GéoGuide en terme d'orientation sur le terrain
+
+
+```{r}
+p_nav_exp <- ggplot(na.omit(tableau), aes(nav_exp)) + geom_bar()
+
+print(p_nav_exp) 
+#ggsave("nav_exp.png", width = 5, height = 5, dpi = 300)
+```
+## Evaluation de la difficulté des contenus
+
+```{r}
+p_content_diff <- ggplot(na.omit(tableau), aes(content_diff)) + geom_bar()
+
+print(p_content_diff) 
+#ggsave("content_diff.png", width = 5, height = 5, dpi = 300)
+```
+## Evaluation de la qualité des textes
+
+```{r}
+p_text_quality <- ggplot(na.omit(tableau), aes(text_quality)) + geom_bar()
+
+print(p_text_quality) 
+#ggsave("text_quality.png", width = 5, height = 5, dpi = 300)
+```
+## Evaluation de la qualité des images
+
+```{r}
+p_picture_quality <- ggplot(na.omit(tableau), aes(picture_quality)) + geom_bar()
+
+print(p_picture_quality) 
+#ggsave("picture_quality.png", width = 5, height = 5, dpi = 300)
+```
+
+## Comparaison entre l'origine et l'expérience d'orientation sur le terrain
+
+
+```{r}
+p_origin_nav_exp <- ggplot(na.omit(tableau), aes(Origin, nav_exp)) + geom_jitter() +
+  scale_x_discrete(breaks=c("Lausanne","Une commune du canton de Vaud", "Une commune situee hors de Suisse", "Une commune suisse hors du canton de Vaud", "Une commune de l agglomeration lausannoise"), labels=c("Lausanne", "Cne VD", "Hors CH", "Cne hors VD", "Cne agglo Lsn")) + theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+)
+
+print(p_origin_nav_exp) 
+#ggsave("origin_nav_exp.png", width = 5, height = 5, dpi = 300)
+```
+Ce graphique nous montre que l'expérience d'orientation à été jugée majoritairement comme adaptée ou facile. À une exception, les personnes venant de Lausanne ou de son agglomération n'ont rencontré aucune difficulté. Même les utilisateurs originaire d'un autre canton ou même hors de Suisse ont globalement jugé positivement l'expérience d'orientation. Nous pouvons donc en conclure que le GeoGuide est un outil efficace du point de vue de l'orientation.
+
+## Comparaison entre l'origine, la connaissance de Lausanne et l'expérience d'orientation
+
+```{r}
+p_origin_KnowLsn <- ggplot(na.omit(tableau), aes(Origin, know_lsn)) + scale_fill_discrete(breaks= navExp_levels) +
+  geom_jitter() +
+  theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+) + scale_x_discrete(breaks=c("Lausanne","Une commune du canton de Vaud", "Une commune situee hors de Suisse", "Une commune suisse hors du canton de Vaud", "Une commune de l agglomeration lausannoise"), labels=c("Lausanne", "Cne VD", "Hors CH", "Cne hors VD", "Cne agglo Lsn"))
+
+print(p_origin_KnowLsn) 
+#ggsave("origin_KnowLsn.png", width = 5, height = 5, dpi = 300)
+```
+Si nous ajoutons à celà le niveau de connaissance de la ville de Lausanne, nous constatons que l'essentiel des participants estime avoir une connaissance faible à moyenne de la ville mais qu'ils ont jugé en majorité l'expérience de navigation adaptée à facile. 
+
+```{r}
+p_nav_exp_KnowLsn <- ggplot(na.omit(tableau), aes(know_lsn, nav_exp)) + scale_fill_discrete(breaks= navExp_levels) +
+  geom_jitter() +
+  theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+)
+
+print(p_nav_exp_KnowLsn) 
+#ggsave("p_nav_exp_KnowLsn", width = 5, height = 5, dpi = 300)
+```
+
+## Relation entre l'appréciation générale du GeoGuide et l'évaluation de la navigation
+
+```{r}
+p_GGrate_navRate <- ggplot(na.omit(tableau), aes(GG_rate, nav_rate, colour = nav_exp)) + geom_jitter() +
+  theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+) 
+
+print(p_GGrate_navRate) 
+#ggsave("GGrate_navRate.png", width = 5, height = 5, dpi = 300)
+```
+Lors d'autres expériences nous avons pu constater que les difficultés d'orientation pouvaient avoir un impact négatif sur l'expérience générale avec le GeoGuide. Nous pouvons constater une relation évidente entre l'évaluation de la navigation dans l'application et l'évaluation générale du GeoGuide. Nous observons que les personnes ayant rencontré des difficultés d'orientation ont jugé plus négativement l'application. Il nous est impossible de savoir si c'est la difficulté d'orientation qui a provoqué une mauvaise expérience générale ou si l'application ne leur a pas permi de faciliter leur orientation.
+
+## Postes apréciés / moins apréciés du point de vue du fond (content) et de la forme (form). Dans l'ordre d'apparition des postes le long du tracé.
+
+Best+content
+
+```{r}
+p_best_content <- ggplot(tableau, aes(x = Best_contentStop)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Contenu préféré") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30)) + scale_x_discrete(drop=FALSE)
+
+p_best_content
+
+#ggsave("p_best_content.pdf", device = pdf, scale = 1, dpi = 300)
+
+```
+Donne un aperçu de la répartition des postes les plus apréciés sur le tracé.
+
+Worst + content
+
+```{r}
+p_worst_content <- ggplot(tableau, aes(x = Worst_ContentStop)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Contenu le moins apprécié") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30)) + scale_x_discrete(drop=FALSE)
+
+p_worst_content
+
+#ggsave("p_worst_content.pdf", device = pdf, scale = 1, dpi = 300)
+```
+Donne un aperçu de la répartition des postes les moins apréciés sur le tracé.
+
+### calculer un coefficient pour le contenu (best-worst)
+
+```{r}
+tbc <-  table(tableau$Best_contentStop)
+tbc_df <- as.data.frame(tbc)
+
+twc <-  table(tableau$Worst_ContentStop)
+twc_df <- as.data.frame(twc)
+
+table_content <- dplyr::left_join(tbc_df, twc_df, by=c("Var1" = "Var1"))
+colnames(table_content) <- c("postes", "best_cont", "worst_cont")
+
+table_content$coeff_cont <-  (table_content$best_cont-table_content$worst_cont)
+
+p_content_coeff <- ggplot() + geom_bar(data = table_content, aes(x = postes, y=coeff_cont), stat = "identity") + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Postes GeoGuide") +
+  ylab("coefficient contenu") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(-14, 26)) + scale_x_discrete(drop=FALSE)
+
+p_content_coeff
+
+#ggsave("p_content_coeff.pdf", device = pdf, scale = 1, dpi = 300)
+```
+
+### Test d'opposition des graphs
+
+```{r}
+
+ comp_best_content <- ggplot(na.omit(tableau), aes(x = Best_contentStop)) +
+  geom_bar() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ylab("contenu +") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30))
+
+comp_worst_content <- ggplot(na.omit(tableau), aes(x = Worst_ContentStop)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Postes GeoGuide") + 
+  ylab("contenu -") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30)) + scale_y_reverse() + scale_x_discrete(drop=FALSE)
+
+multiplot(comp_best_content,comp_worst_content, cols = 1)
+
+```
+
+Best + Form
+
+```{r}
+p_best_form <- ggplot(tableau, aes(x = Best_formStop)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("La forme préférée") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30)) + scale_x_discrete(drop=FALSE)
+p_best_form
+
+#ggsave("p_best_form.pdf", device = pdf, scale = 1, dpi = 300)
+```
+Donne un aperçu de la répartition des postes les plus apréciés sur le tracé.
+
+Worst + form
+
+```{r}
+p_worst_form <- ggplot(tableau, aes(x = Worst_formStop)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("La forme la moins appréciée") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30)) + scale_x_discrete(drop=FALSE)
+
+p_worst_form
+
+#ggsave("p_worst_form.pdf", device = pdf, scale = 1, dpi = 300)
+```
+Donne un aperçu de la répartition des postes les moins apréciés sur le tracé.
+
+### calculer un coefficient pour le contenu (best-worst)
+
+```{r}
+tbf <-  table(tableau$Best_formStop)
+tbf_df <- as.data.frame(tbf)
+
+ #write.csv(tbf_df, file = "best_forme.csv")
+
+twf <-  table(tableau$Worst_formStop)
+twf_df <- as.data.frame(twf)
+
+table_form <- dplyr::left_join(tbf_df, twf_df, by=c("Var1" = "Var1"))
+colnames(table_form) <- c("postes", "best_form", "worst_form")
+
+table_form$coeff_form <-  (table_form$best_form-table_form$worst_form)
+
+p_form_coeff <- ggplot() + geom_bar(data = table_form, aes(x = postes, y=coeff_form), stat = "identity") + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Postes GeoGuide") +
+  ylab("coefficient forme") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(-14, 26)) + scale_x_discrete(drop=FALSE)
+
+p_form_coeff
+
+#ggsave("p_form_coeff.pdf", device = pdf, scale = 1, dpi = 300)
+```
+
+
+### opposition des graphs
+
+```{r}
+ comp_best_form <- ggplot(na.omit(tableau), aes(x = Best_formStop)) +
+  geom_bar() + 
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ylab("forme +") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30))
+
+comp_worst_form <- ggplot(na.omit(tableau), aes(x = Worst_formStop)) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Postes GeoGuide") + 
+  ylab("forme -") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30)) + scale_y_reverse()
+
+
+multiplot(comp_best_form,comp_worst_form, cols = 1)
+
+```
+
+## Postes apréciés / moins apréciés du point de vue du fond (content) et de la forme (form). Classement décroissant.
+
+Best+content
+
+
+```{r}
+p_best_content_des <- ggplot(na.omit(tableau), aes(x=reorder(Best_contentStop,Best_contentStop,function(x)-length(x)))) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Contenu préféré") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30))
+
+p_best_content_des
+```
+Au niveau du contenu, le poste "Casacade du Flon" à été largment apprécié avec plus de 20 points. Suivent ensuite la place St-Laurent avec plus de 10 point, le Lac de Sauvabelin et la Place Pépinet avec 10 points.
+
+Les premièrs postes ont en commun…
+
+Worst + content
+
+```{r}
+p_worst_content <- ggplot(na.omit(tableau), aes(x=reorder(Worst_ContentStop,Worst_ContentStop,function(x)-length(x)))) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("Contenu le moins apprécié") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30))
+
+p_worst_content
+```
+Les postes les moins appréciés sont la place du Vallon, la place de la Riponne, le Giratoire de la Maladière, la STEP de Vidy et le Paroi de Molasse qui comptent entre 14 et 11 points. On relèvera la différence de score entre le poste le plus apprécié et le moins apprécié qui va du simple au double.
+
+
+Best + Form
+
+```{r}
+p_best_form <- ggplot(na.omit(tableau), aes(x=reorder(Best_formStop,Best_formStop,function(x)-length(x)))) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("La forme préférée") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30))
+
+p_best_form
+```
+Pour ce qui est de la forme, on retoruve en première position la cascade du Flon avec 20 points, suivie de la Place Pépinet, de la Place St-Laurent et de l'Esplanade de Montbenon, de Ruines de Vidy et de la Moraine de Dorigny qui font leur entrée en tête du classement. On remarque toutefois que les scores sont moins généreux que pour le contenu et que, à nouveau, la cascade du Flon se démarque largement des autres postes.
+
+La Place Pépinet, de la Place St-Laurent et de l'Esplanade de Montbenon, de Ruines de Vidy et de la Moraine de Dorigny ont en commun…
+
+Worst + form
+
+```{r}
+p_worst_form <- ggplot(na.omit(tableau), aes(x=reorder(Worst_formStop,Worst_formStop,function(x)-length(x)))) +
+  geom_bar() + 
+  theme(axis.text.x = element_text(angle=90), axis.ticks = element_blank()) +
+  xlab("La forme la moins appréciée") + 
+  ylab("Nombre d'étudiants") +
+  theme(panel.background = element_rect(fill = NA),
+    panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+    panel.ontop = FALSE
+  ) + scale_y_continuous(limits=c(0, 30))
+
+p_worst_form
+```
+Pour ce qui est de la forme la moins appréciée. Si l'on exclu de la comparaison la cascade du Flon, l'amplitude des scores est assez similaire au graphique précédent. On trouve en tête le poste "UNIL Mouline"", la STEP de Vidy, la Place de la Riponne, la Tour de Sauvabelin, la Paroi de Molasse et l'Usine à gaz.
+
+Ces postes ont en commun…
+
+```{r}
+#multiplot(p_best_content, p_worst_content, p_best_form, p_worst_form, cols=2)
+```
+
+
+## Analyse Factorielle des composantes multiples
+```{r}
+library(FactoMineR)
+```
+
+```{r}
+#sto <-  as_data_frame(stop_order)
+#write.csv(sto, file = "sto_df.csv")
+
+#eval_df <- as.data.frame(select(tableau, Best_formStop,Best_contentStop, Worst_ContentStop, Worst_formStop))
+
+#eval_dfm <- melt(eval_df)
+```
+
+```{r}
+scont = read.table("./stop_content.csv", sep = ";", header=TRUE, fill = TRUE, quote = "")
+```
+
+
+```{r}
+res.mca = MCA(tableau, quanti.sup=1:2, quali.sup=22)
+```
+```{r}
+summary(res.mca)
+```
+```{r}
+a <- plot.MCA(res.mca, invisible=c("var","quali.sup"), cex=0.7)
+b <- plot.MCA(res.mca, invisible=c("ind","quali.sup"), cex=0.7)
+c <- plot.MCA(res.mca, invisible=c("ind"), cex=0.7)
+d <- plot.MCA(res.mca, invisible=c("ind", "var"), cex=0.7)
+```
+
+Le nuage des individus met en lumière un groupe (52, 74, 85) qui contribue fortement à la 1e dimension.
+
+```{r}
+dimdesc(res.mca)
+```
+```{r}
+plotellipses(res.mca,keepvar=c(20:23))
+```
+
+# ```{r}
+# tbc <-  table(tableau$Worst_formStop)
+# coucou <- as.data.frame(tbc)
+# write.table(coucou, "coucou.txt", sep="\t")
+# 
+# ```
+

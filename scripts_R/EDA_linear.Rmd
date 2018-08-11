@@ -1,0 +1,649 @@
+---
+title: "EDA_analyse"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+## Electrodermal activity
+
+
+```{r} 
+# packages
+#library(gridExtra)
+#library(grid)
+library(lattice)
+library(lme4)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(reshape2)
+
+```
+
+```{r}
+# initialisation de la fonction multiplot
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+# fin de la fonction
+```
+
+
+chargement des données
+```{r}
+df = read.csv(file="/Users/lgrangi1/switchdrive/These/3_GM_Experiment/edaMove_dataFinal/allUser_results_Ranalyse.csv", sep = ";", header=T)
+
+dtime = read.csv(file="/Users/lgrangi1/switchdrive/These/3_GM_Experiment/DBgeoguide_log/DB_results/navLog_complete.csv", sep = ";", header=T)
+
+df[, 13:15][df[, 13:15] == 0] <- NA
+
+df$user <- factor(df$user)
+df$gstatus <- factor(df$gstatus)
+df$sexe <- factor(df$sexe)
+df$ActivityClass <- factor(df$ActivityClass)
+
+summary(df)
+
+```
+### Test de plot altitude
+
+```{r}
+p_alt <-  ggplot(df, aes(Time_relS, Altitude_m, color = user)) + geom_line() + theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+) #+ facet_grid(user~.)
+
+p_alt
+#ggsave("p_alt.pdf", device = pdf, height = 4, width = 8, dpi = 300)
+```
+altitude Rippone: 505m
+altitude place cathédrale: 525.7m
+
+### Afficher altitude + EDA pour chaque utilisateur
+
+```{r}
+
+user_list <-  unique(df$user)
+
+for (i in user_list){
+    p1 <-  ggplot() + geom_line(data=subset(df,user== i), aes(Time_relS, Altitude_m)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Altitude',i)) + scale_x_continuous(limits = c(0, 5390)) +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+    
+    p2 <-  ggplot() + geom_line(data=subset(df,user== i), aes(Time_relS, EdaArousalMean)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Eda Arousal',i)) + scale_x_continuous(limits = c(0, 5390))
+    
+    multiplot(p1,p2, cols = 1)
+}
+```
+
+
+### plot eda
+
+```{r}
+p_eda_userGM <-  ggplot() + geom_line(data=subset(df,gstatus=="GM"), aes(Time_relS, EdaArousalMean, color = sexe)) + 
+  theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+) + facet_grid(user~.)
+
+p_eda_userGM
+#ggsave("p_eda_userGM.pdf", device = pdf, width = 6, height = 4, dpi = 300)
+```
+
+```{r}
+p_eda_userNOGM <-  ggplot(data=subset(df,gstatus== "NOGM"), aes(Time_relS, EdaArousalMean, color = sexe)) + geom_line() + 
+  theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+) + facet_grid(user~.)
+
+p_eda_userNOGM
+#ggsave("p_eda_userNOGM.pdf", device = pdf, width = 6, height = 4, dpi = 300)
+```
+
+```{r}
+p_eda_smooth <-  ggplot(df, aes(Time_relS, EdaArousalMean, color = user, linetype = gstatus)) + geom_smooth() + 
+  theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+) #+ facet_grid(user~.)
+
+p_eda_smooth
+#ggsave("p_eda_smooth.pdf", device = pdf, scale = 1, dpi = 300)
+```
+
+```{r}
+log_eda <- log(df$EdaArousalMean, base = exp(1))
+plot(df$EdaArousalMean)
+plot(log_eda)
+```
+```{r}
+qplot(log_eda,
+      geom="histogram", 
+      binwidth = 0.5,
+      main = "Histogram for EDA Arousal Mean (log)")
+```
+
+```{r}
+df %>% # par mode
+  group_by(gstatus) %>% 
+  summarise_at(c("EdaArousalMean"), funs(sd, mean, median))
+
+df %>% # par genre
+  group_by(sexe) %>% 
+  summarise_at(c("EdaArousalMean"), funs(sd, mean, median))
+```
+
+
+
+## Two-Way ANOVA with Repeated Measures
+```{r}
+myData.mean <- aggregate(df$EdaArousalMean, by = list(df$user, df$gstatus, df$sexe, df$bmi), FUN = 'mean')
+
+colnames(myData.mean) <- c("user","gstatus","sexe","bmi", "eda")
+
+myData.mean <- myData.mean[order(myData.mean$user), ]
+head(myData.mean)
+```
+
+## construction de l'ANOVA
+
+```{r}
+#eda.aov <- with(myData.mean, aov(eda ~ gstatus * sexe + Error(user / (gstatus * sexe))))
+```
+
+!! Error() model is singular !! Il faut utiliser un modèle linéaire mixte
+
+## linear mixed effects analyses
+
+```{r}
+
+df2 = read.csv(file="/Users/lgrangi1/switchdrive/These/3_GM_Experiment/edaMove_dataFinal/allUser_results_Ranalyse_null.csv", sep = ";", header=T)
+df2$user <- factor(df2$user)
+df2$gstatus <- factor(df2$gstatus)
+df2$sexe <- factor(df2$sexe)
+df2$ActivityClass <- factor(df2$ActivityClass)
+
+df2[, 13:15][df[, 13:15] == 0] <- NA
+
+summary(df2)
+which(is.na(df2)==T) #vérifier données manquantes
+```
+observons la relation entre l'EDA et le GSTATUS avec un boxplot.
+
+```{r}
+boxplot(EdaArousalMean ~ gstatus*sexe, col=c("white","lightgray"),df2)
+```
+nous ne voyons pas grand chose. Essayons autrement en modifiant l'axe "y" pour y voir de plus près.
+
+```{r}
+boxplot(log(EdaArousalMean) ~ gstatus*sexe, col=c("white","lightgray"), yaxs = "i",df2)
+```
+Il semblerait que les mesures d'activité éléctrodermale soient plus élevées chez les personnes ayant utilisé la version gamifiée de l'application.
+
+```{r}
+#lmer(EdaArousalMean ~ gstatus, data=df2)
+```
+… and you will retrieve an error that should look like this. This is because the model needs a random effect (after all, “mixing” fixed and random effects is the point of mixed models).
+
+```{r}
+eda.model = lmer(EdaArousalMean ~ gstatus + (1|user) + (1|bmi), data=df2)
+
+eda.model
+```
+Let’s add gender as an additional fixed effect:
+```{r}
+eda.model = lmer(EdaArousalMean ~ gstatus + sexe + (1|user) + (1|bmi), data=df2)
+
+eda.model
+```
+
+Statistical significance
+```{r}
+eda.null = lmer(EdaArousalMean ~ sexe + (1|user) + (1|bmi), data=df2, REML=FALSE)
+```
+et maintenant
+
+```{r}
+eda.model = lmer(EdaArousalMean ~ gstatus + sexe + (1|user) + (1|bmi), data=df2, REML=FALSE)
+```
+et en route pour l'ANOVA
+
+```{r}
+anova(eda.null,eda.model)
+```
+
+
+Super-crucial: Random slopes versus random intercepts
+
+```{r}
+coef(eda.model)
+```
+### Comptage des pas par utilisater (la valeur moyenne d'une foulée pour un humain mesurant entre 1,5m et 1,9m est de 1 mètre.)
+
+```{r}
+df$stepcum <-  do.call(c, tapply(df$StepCount, df$user, FUN=cumsum))
+
+p_step <-  ggplot(df, aes(Time_relS, stepcum, color = user)) + geom_line(aes(linetype=gstatus)) +
+  theme(
+  panel.background = element_rect(fill = NA),
+  panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+  panel.ontop = FALSE
+) #+ facet_grid(user~.)
+
+p_step
+#ggsave("p_step.pdf", device = pdf, height = 4, width = 8, dpi = 300)
+```
+
+
+```{r}
+Trel_GM = subset(df, gstatus =="GM")
+Trel_NOGM = subset(df, gstatus =="NOGM")
+
+tmoyGM <- Trel_GM %>% # par utilisateur
+  group_by(user) %>% 
+  summarise_at(c("Time_relS"), funs(max))
+
+tmoyNOGM <- Trel_NOGM %>% # par utilisateur
+  group_by(user) %>% 
+  summarise_at(c("Time_relS"), funs(max))
+
+mean(tmoyGM$Time_relS)
+mean(tmoyNOGM$Time_relS)
+```
+```{r}
+
+t.test(tmoyGM$Time_relS, tmoyNOGM$Time_relS)
+```
+
+
+```{r}
+#user_list <-  unique(df$user)
+
+for (i in user_list){
+    palt <-  ggplot() + geom_line(data=subset(df,user== i), aes(Time_relS, Altitude_m)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Altitude',i)) + scale_x_continuous(limits = c(0, 5390)) +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+    
+    peda <-  ggplot() + geom_line(data=subset(df,user== i), aes(Time_relS, EdaArousalMean)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Eda Arousal',i)) + scale_x_continuous(limits = c(0, 5390)) +
+      theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+    
+    
+        pstep <-  ggplot() + geom_line(data=subset(df,user== i), aes(Time_relS, stepcum)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Step sum',i)) + scale_x_continuous(limits = c(0, 5390))
+    
+    multiplot(palt,peda, pstep, cols = 1)
+}
+
+```
+### Sio on rapporte l'EDA à la distance?
+```{r}
+for (i in user_list){
+p_edadist <-  ggplot() + geom_path(data=subset(df,user== i), aes(stepcum, EdaArousalMean)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('EDA Arousal',i)) + scale_x_continuous(limits = c(0, 4500))
+
+ multiplot(p_edadist, cols = 1)
+}
+```
+
+```{r}
+colnames(dtime)[which(names(dtime) == "timeRel_log")] <- "Time_rel"
+mdf <- merge(dtime,df,by=c("time_abs","user"))
+
+mdf[, 13:15][mdf[, 13:15] == 0] <- NA
+```
+
+```{r}
+
+mdf$page <- mapvalues(mdf$page, from = c("welcome", "map", "autres", "liste", "stop8", "quiz-8", "stop9", "quiz-9", "stop10", "quiz-10", "stop11", "quiz-11", "stop12", "quiz-12", "stop13", "quiz-13", "stop14", "quiz-14", "stop15", "quiz-15", "None"), to = c("wlc", "map", "aut", "li", "s8", "q8", "s9", "q9", "s10", "q10", "s11", "q11", "s12", "q12", "s13", "q13", "s14", "q14", "s15", "q15", "No"))
+
+page_order <- c("wlc", "map", "aut", "li", "s8", "q8", "s9", "q9", "s10", "q10", "s11", "q11", "s12", "q12", "s13", "q13", "s14", "q14", "s15", "q15", "No","NL")
+
+#On recode les 4 variables relatives aux postes en incluant l'ordre des postes 
+mdf$page <- factor(mdf$page, levels = page_order)
+```
+
+```{r}
+user_list2 <-  unique(mdf$user)
+
+for (i in user_list2){
+    p11 <-  ggplot() + geom_line(data=subset(mdf,user== i), aes(Time_relS, Altitude_m)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Altitude',i)) + scale_x_continuous(limits = c(1000, 4000)) +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+      scale_y_continuous(position = "right")
+    
+    ggsave(paste("Alt_comp",i,".pdf"), device = pdf, width = 8, height = 3, dpi = 300)
+  
+    
+    p12 <-  ggplot() + geom_point(data=subset(mdf,user== i), aes(Time_relS, page, color = page), show.legend=F) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Pages',i)) + scale_x_continuous(limits = c(1000, 4000)) +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+      scale_y_discrete(position = "right")
+    
+    ggsave(paste("Eda_comp",i,".pdf"), device = pdf, width = 8, height = 3, dpi = 300)
+    
+    p13 <-  ggplot() + geom_line(data=subset(mdf,user== i), aes(Time_relS, stepcum)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Step sum',i)) + scale_x_continuous(limits = c(1000, 4000)) +
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+      scale_y_continuous(position = "right")
+
+    ggsave(paste("step_comp",i,".pdf"), device = pdf, width = 8, height = 3, dpi = 300)
+    
+    p14 <-  ggplot() + geom_line(data=subset(mdf,user== i), aes(Time_relS, EdaArousalMean)) +
+      theme(
+      panel.background = element_rect(fill = NA),
+      panel.grid.major = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.grid.minor.y = element_line(colour = "grey60", size = 0.25, linetype = 'dashed'),
+      panel.ontop = FALSE
+    ) + ylab(paste('Eda Arousal',i)) + scale_x_continuous(limits = c(1000, 4000)) +
+      scale_y_continuous(position = "right")
+    
+      multiplot(p11,p12, p13, p14, cols = 1)
+    
+    ggsave(paste("Nav_comp",i,".pdf"), device = pdf, width = 8, height = 3, dpi = 300)
+}
+```
+```{r}
+p_eda_page <- ggplot(mdf, aes(page, EdaArousalMean, color = gstatus)) + geom_jitter()
+
+p_eda_page
+#ggsave("p_eda_page.pdf", device = pdf, height = 4, width = 8, dpi = 300)
+```
+
+
+## Deuxième tentative "Linear Mixed Model"
+
+```{r}
+str(df2)
+```
+```{r}
+summary(df2)
+```
+```{r}
+head(df2)
+```
+```{r}
+#renommer EdaArousalMean en eda
+names(df2)[names(df2) == "EdaArousalMean"] <- "eda"
+```
+
+
+```{r}
+table(df2$user, df2$sexe) 
+```
+En raison de la durée différente de l'expérience pour chaque individus, il y a une différence dans le nombre de mesures.
+
+```{r}
+qplot(gstatus, eda, facets = . ~ user, colour = sexe, geom = "boxplot", 
+    data = df2) + theme_bw()
+ggsave("p_summary.pdf", device = pdf, height = 4, width = 8, dpi = 300)
+```
+
+À première vue il n'y a ni différence entre les sexes ou entre les modes de l'application.
+
+```{r}
+with(df2, aggregate(eda ~ user, FUN = "mean"))
+```
+Est-ce qu'il y a une corrélation intra-sujet du niveau d'eda?
+
+```{r}
+GM_user = subset(df2, gstatus == "GM") #division du tableau de données en 2 groupes GM…
+head(GM_user)
+```
+```{r}
+NOGM_user = subset(df2, gstatus == "NOGM") #… et NOGM
+head(NOGM_user)
+```
+
+```{r}
+eqNOGM_user <-NOGM_user[1:2148, ] #comme les deux DF n'ont pas un nombre = d'observations je ne peux pas faire le graphique... 
+qplot(GM_user$eda, eqNOGM_user$eda) + geom_smooth(method = "lm", fullrange = TRUE)
+```
+```{r}
+df2$random = sample(1:6, 4408, replace=T) #création d'une variable aléatoire (random effect)
+
+qplot(1, eda, facets = gstatus ~ random, colour = random, geom = "boxplot", 
+    data = df2) + theme_bw()
+
+```
+```{r}
+ which(is.na(df2$eda) == T) # identifier les valeurs manquantes
+```
+```{r}
+bp <- with(df2, boxplot(eda ~ gstatus * sexe, col = c("white", "lightgray"), 
+    gstatus))
+```
+
+```{r}
+bp$out # extraction des valeures extrêmes
+```
+```{r}
+subset(df2, eda == bp$out)
+
+```
+
+```{r}
+lmer(eda ~ gstatus, data = df2)  # this doesn't work! Need a random error term to use lmer
+```
+```{r}
+# model w/rfx
+rs_subj_reml = lmer(eda ~ gstatus + (1 | user), data = df2)
+rs_subj_ml = lmer(eda ~ gstatus + (1 | user), REML = FALSE, data = df2)
+
+# model info
+summary(rs_subj_ml)
+```
+```{r}
+anova(rs_subj_reml)
+```
+
+```{r}
+coef(rs_subj_reml)
+```
+
+```{r}
+AIC(rs_subj_reml)
+```
+
+```{r}
+logLikelihood = logLik(rs_subj_reml)
+deviance = -2 * logLikelihood[1]
+deviance
+```
+
+```{r}
+# how to get p-vals install.packages('languageR') library(languageR) rs.mcmc
+# = pvals.fnc(rs_subj_reml, nsim = 10000, addPlot = T) print(rs.mcmc)
+
+library(languageR)
+
+# Now approx p-val w/Kenward-Roger’s approximations
+# install.packages('lmerTest')
+library(lmerTest)
+
+```
+
+```{r}
+rs_subj_reml = lmer(eda ~ gstatus + (1 | user), data = df2)  # you have to re-run lmer now!
+anova(rs_subj_reml, ddf = "Kenward-Roger")
+```
+
+```{r}
+# or, use model comparison!
+rs_subj_ml = lmer(eda ~ gstatus + (1 | user), REML = FALSE, data = df2)
+rs_null_ml = lmer(eda ~ 1 + (1 | user), REML = FALSE, data = d)
+
+anova(rs_null_ml, rs_subj_ml)
+```
+
+```{r}
+rs_subjscene_reml = lmer(eda ~ gstatus + (1 | user) + (1 | random), 
+    data = df2)
+summary(rs_subjscene_reml)
+```
+
+```{r}
+anova(rs_subjscene_reml)
+```
+
+```{r}
+coef(rs_subjscene_reml)
+```
+
+```{r}
+print(c(deviance = -2 * logLik(rs_subjscene_reml)))
+```
+
+```{r}
+summary(lm(eda ~ gstatus, df2))
+```
+
+```{r}
+rs_gen_subj_reml = lmer(eda ~ gstatus + sexe + (1 | user) + (1 | random), 
+    data = df2)
+summary(rs_gen_subj_reml)
+```
+
+```{r}
+rs_gen_subjscene_ml = lmer(eda ~ gstatus + sexe + (1 | user) + (1 | 
+    random), REML = FALSE, data = df2)
+
+rs_null_subjscene_ml = lmer(eda ~ sexe + (1 | user) + (1 | random), 
+    REML = FALSE, data = df2)
+
+anova(rs_gen_subjscene_ml, rs_null_subjscene_ml)
+```
+
+```{r}
+chisq_val = -2 * ((logLik(rs_gen_subjscene_ml)[1]) - (logLik(rs_null_subjscene_ml)[1]))
+chisq_val
+```
+
+```{r}
+chisq_df = 6 - 5
+chisq_df
+```
+
+```{r}
+rs_intergen_subjscene_ml = lmer(eda ~ gstatus * sexe + (1 | user) + 
+    (1 | random), REML = FALSE, data = df2)
+summary(rs_intergen_subjscene_ml)
+```
+
+```{r}
+
+anova(rs_gen_subjscene_ml, rs_intergen_subjscene_ml)
+```
+
